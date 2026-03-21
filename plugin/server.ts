@@ -923,7 +923,12 @@ async function handleInbound(
   const isTopicMsg = ctx.message?.is_topic_message
 
   // If bound to a topic, drop messages from other topics (or the General thread).
-  if (boundTopicId != null && threadId !== boundTopicId) return
+  if (boundTopicId != null && threadId !== boundTopicId) {
+    process.stderr.write(
+      `telegram channel: dropping message (thread ${threadId} != bound ${boundTopicId})\n`,
+    )
+    return
+  }
 
   // image_path goes in meta only — an in-content "[image attached — read: PATH]"
   // annotation is forgeable by any allowlisted sender typing that string.
