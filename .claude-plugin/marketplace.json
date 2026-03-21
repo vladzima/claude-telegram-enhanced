@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "telegram-enhanced",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": "./plugin",
       "description": "Enhanced Telegram channel with topic-per-worktree routing, response streaming via drafts, and full access control."
     }
