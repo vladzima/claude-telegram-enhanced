@@ -14,6 +14,12 @@
  * directory. The daemon handles the single getUpdates poll for all of them.
  */
 
+import { appendFileSync } from 'fs'
+const _debugLog = (msg: string) => {
+  const line = `[${new Date().toISOString()}] ${msg}\n`
+  process.stderr.write(line)
+  try { appendFileSync('/tmp/telegram-server-debug.log', line) } catch {}
+}
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
@@ -441,18 +447,19 @@ process.on('SIGINT', shutdown)
 // --- Startup: ensure daemon, create topic, watch inbox ---
 
 async function startup(): Promise<void> {
+  _debugLog('startup() called')
   // 1. Start the daemon if not running
   await ensureDaemon()
-  process.stderr.write('telegram channel: daemon is running\n')
+  _debugLog('daemon is running')
 
   // 2. Create topic if needed
+  _debugLog(`topicName=${topicName}, topicChatId=${topicChatId}, boundTopicId=${boundTopicId}`)
   if (topicName && topicChatId && boundTopicId == null) {
     try {
+      _debugLog('creating forum topic...')
       const topic = await bot.api.createForumTopic(topicChatId, topicName)
       boundTopicId = topic.message_thread_id
-      process.stderr.write(
-        `telegram channel: created topic "${topicName}" (thread_id: ${boundTopicId}) in chat ${topicChatId}\n`,
-      )
+      _debugLog(`created topic "${topicName}" (thread_id: ${boundTopicId})`)
       // Send welcome message
       await bot.api.sendMessage(topicChatId, `Claude Code session ready.\nBranch: ${topicName}`, {
         message_thread_id: boundTopicId,
@@ -465,17 +472,15 @@ async function startup(): Promise<void> {
         createdAt: Date.now(),
       })
     } catch (err) {
-      process.stderr.write(`telegram channel: failed to create topic "${topicName}": ${err}\n`)
+      _debugLog(`failed to create topic "${topicName}": ${err}`)
     }
   }
 
-  if (boundTopicId != null) {
-    process.stderr.write(`telegram channel: bound to topic ${boundTopicId}\n`)
-  }
+  _debugLog(`boundTopicId after topic creation: ${boundTopicId}`)
 
   // 3. Watch inbox directory for envelopes
   const watchDir = topicDir(boundTopicId)
-  process.stderr.write(`telegram channel: watching ${watchDir}\n`)
+  _debugLog(`watching ${watchDir}`)
 
   // Drain existing envelopes first
   drainInbox(watchDir)
@@ -488,7 +493,7 @@ async function startup(): Promise<void> {
       }
     })
   } catch (err) {
-    process.stderr.write(`telegram channel: fs.watch failed, using polling only: ${err}\n`)
+    _debugLog(`fs.watch failed, using polling only: ${err}`)
   }
 
   // Polling fallback — catches any missed watch events
@@ -497,14 +502,18 @@ async function startup(): Promise<void> {
   // Periodic daemon health check — respawn if it died
   setInterval(async () => {
     if (!isAlive()) {
-      process.stderr.write('telegram channel: daemon not running, respawning...\n')
+      _debugLog('daemon not running, respawning...')
       await ensureDaemon()
     }
   }, 30_000).unref()
 }
 
+let _drainCount = 0
 function drainInbox(dir: string): void {
   const files = listPendingEnvelopes(dir)
+  if (files.length > 0 || _drainCount++ % 600 === 0) {
+    _debugLog(`drainInbox(${dir}): ${files.length} pending`)
+  }
   for (const f of files) {
     deliverEnvelope(join(dir, f))
   }
@@ -547,4 +556,9 @@ function deliverEnvelope(filePath: string): void {
   })
 }
 
-void startup()
+_debugLog('about to call startup()')
+startup().then(() => {
+  _debugLog('startup() completed successfully')
+}).catch(err => {
+  _debugLog(`startup() FAILED: ${err}`)
+})
