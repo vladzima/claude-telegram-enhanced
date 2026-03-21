@@ -116,7 +116,7 @@ export function readAndConsumeEnvelope(filePath: string): InboxEnvelope | null {
 export function listPendingEnvelopes(dir: string): string[] {
   try {
     return readdirSync(dir)
-      .filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
+      .filter(f => f.endsWith('.json') && !f.endsWith('.tmp') && f !== 'meta.json')
       .sort() // lexicographic sort on zero-padded seq prefix
   } catch {
     return []

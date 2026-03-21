@@ -14,12 +14,6 @@
  * directory. The daemon handles the single getUpdates poll for all of them.
  */
 
-import { appendFileSync } from 'fs'
-const _debugLog = (msg: string) => {
-  const line = `[${new Date().toISOString()}] ${msg}\n`
-  process.stderr.write(line)
-  try { appendFileSync('/tmp/telegram-server-debug.log', line) } catch {}
-}
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
@@ -436,7 +430,6 @@ function shutdown(): void {
   if (shuttingDown) return
   shuttingDown = true
   process.stderr.write('telegram channel: shutting down\n')
-  setTimeout(() => process.exit(0), 2000)
   process.exit(0)
 }
 process.stdin.on('end', shutdown)
@@ -447,19 +440,18 @@ process.on('SIGINT', shutdown)
 // --- Startup: ensure daemon, create topic, watch inbox ---
 
 async function startup(): Promise<void> {
-  _debugLog('startup() called')
   // 1. Start the daemon if not running
   await ensureDaemon()
-  _debugLog('daemon is running')
+  process.stderr.write('telegram channel: daemon is running\n')
 
   // 2. Create topic if needed
-  _debugLog(`topicName=${topicName}, topicChatId=${topicChatId}, boundTopicId=${boundTopicId}`)
   if (topicName && topicChatId && boundTopicId == null) {
     try {
-      _debugLog('creating forum topic...')
       const topic = await bot.api.createForumTopic(topicChatId, topicName)
       boundTopicId = topic.message_thread_id
-      _debugLog(`created topic "${topicName}" (thread_id: ${boundTopicId})`)
+      process.stderr.write(
+        `telegram channel: created topic "${topicName}" (thread_id: ${boundTopicId}) in chat ${topicChatId}\n`,
+      )
       // Send welcome message
       await bot.api.sendMessage(topicChatId, `Claude Code session ready.\nBranch: ${topicName}`, {
         message_thread_id: boundTopicId,
@@ -472,15 +464,17 @@ async function startup(): Promise<void> {
         createdAt: Date.now(),
       })
     } catch (err) {
-      _debugLog(`failed to create topic "${topicName}": ${err}`)
+      process.stderr.write(`telegram channel: failed to create topic "${topicName}": ${err}\n`)
     }
   }
 
-  _debugLog(`boundTopicId after topic creation: ${boundTopicId}`)
+  if (boundTopicId != null) {
+    process.stderr.write(`telegram channel: bound to topic ${boundTopicId}\n`)
+  }
 
   // 3. Watch inbox directory for envelopes
   const watchDir = topicDir(boundTopicId)
-  _debugLog(`watching ${watchDir}`)
+  process.stderr.write(`telegram channel: watching ${watchDir}\n`)
 
   // Drain existing envelopes first
   drainInbox(watchDir)
@@ -493,7 +487,7 @@ async function startup(): Promise<void> {
       }
     })
   } catch (err) {
-    _debugLog(`fs.watch failed, using polling only: ${err}`)
+    process.stderr.write(`telegram channel: fs.watch failed, using polling only: ${err}\n`)
   }
 
   // Polling fallback — catches any missed watch events
@@ -502,18 +496,14 @@ async function startup(): Promise<void> {
   // Periodic daemon health check — respawn if it died
   setInterval(async () => {
     if (!isAlive()) {
-      _debugLog('daemon not running, respawning...')
+      process.stderr.write('telegram channel: daemon not running, respawning...\n')
       await ensureDaemon()
     }
   }, 30_000).unref()
 }
 
-let _drainCount = 0
 function drainInbox(dir: string): void {
   const files = listPendingEnvelopes(dir)
-  if (files.length > 0 || _drainCount++ % 600 === 0) {
-    _debugLog(`drainInbox(${dir}): ${files.length} pending`)
-  }
   for (const f of files) {
     deliverEnvelope(join(dir, f))
   }
@@ -526,7 +516,7 @@ function deliverEnvelope(filePath: string): void {
 
     // Skip stale messages (>1 hour old)
     if (Date.now() - envelope.receivedAt > 60 * 60 * 1000) {
-      _debugLog(`skipping stale message (${Math.round((Date.now() - envelope.receivedAt) / 60000)}min old)`)
+      process.stderr.write(`telegram channel: skipping stale message (${Math.round((Date.now() - envelope.receivedAt) / 60000)}min old)\n`)
       return
     }
 
@@ -537,8 +527,6 @@ function deliverEnvelope(filePath: string): void {
     } catch {
       tsIso = new Date(envelope.receivedAt).toISOString()
     }
-
-    _debugLog(`delivering envelope: msg=${envelope.messageId} from=${envelope.fromUsername} text="${envelope.text?.slice(0, 50)}"`)
 
     mcp.notification({
       method: 'notifications/claude/channel',
@@ -563,16 +551,13 @@ function deliverEnvelope(filePath: string): void {
         },
       },
     }).catch(err => {
-      _debugLog(`failed to deliver inbound to Claude: ${err}`)
+      process.stderr.write(`telegram channel: failed to deliver inbound to Claude: ${err}\n`)
     })
   } catch (err) {
-    _debugLog(`deliverEnvelope error: ${err}`)
+    process.stderr.write(`telegram channel: deliverEnvelope error: ${err}\n`)
   }
 }
 
-_debugLog('about to call startup()')
-startup().then(() => {
-  _debugLog('startup() completed successfully')
-}).catch(err => {
-  _debugLog(`startup() FAILED: ${err}`)
+startup().catch(err => {
+  process.stderr.write(`telegram channel: startup failed: ${err}\n`)
 })

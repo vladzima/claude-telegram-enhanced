@@ -41,6 +41,7 @@ process.on('uncaughtException', err => {
 
 const bot = new Bot(TOKEN)
 let botUsername = ''
+let botId = 0
 
 // --- Pairing approval polling ---
 
@@ -79,6 +80,9 @@ async function handleInbound(
   downloadImage: (() => Promise<string | undefined>) | undefined,
   attachment?: AttachmentMeta,
 ): Promise<void> {
+  // Skip bot's own reflected messages
+  if (botId && ctx.from?.id === botId) return
+
   const result = gate(ctx, botUsername)
 
   if (result.action === 'drop') return
@@ -324,6 +328,7 @@ void (async () => {
       await bot.start({
         onStart: async info => {
           botUsername = info.username
+          botId = info.id
           writePidFile(process.pid)
           process.stderr.write(`telegram daemon: polling as @${info.username} (pid ${process.pid})\n`)
 
