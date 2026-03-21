@@ -29,8 +29,14 @@ To enable topics, open the BotFather Mini App and toggle **Threaded Mode** on fo
 
 ### 2. Install the plugin
 
+First, register the marketplace:
 ```
-/plugin install telegram-enhanced@vladzima/claude-telegram-enhanced
+claude plugin marketplace add vladzima/claude-telegram-enhanced
+```
+
+Then install:
+```
+claude plugin install telegram-enhanced@claude-telegram-enhanced
 ```
 
 ### 3. Configure the token
@@ -49,7 +55,7 @@ echo 'TELEGRAM_BOT_TOKEN=123456789:AAHfiqksKZ8...' > ~/.claude/channels/telegram
 ### 4. Launch with the channel flag
 
 ```sh
-claude --channels plugin:telegram-enhanced@vladzima/claude-telegram-enhanced
+claude --channels plugin:telegram-enhanced@claude-telegram-enhanced
 ```
 
 ### 5. Pair
@@ -79,11 +85,11 @@ When bound, the session **only** receives messages from its topic and **all** re
 ```bash
 # Session 1 — gets its own topic "feature-auth"
 TELEGRAM_TOPIC_NAME="feature-auth" TELEGRAM_TOPIC_CHAT_ID="123456" \
-  claude --channels plugin:telegram-enhanced@vladzima/claude-telegram-enhanced
+  claude --channels plugin:telegram-enhanced@claude-telegram-enhanced
 
 # Session 2 — gets its own topic "bugfix-api"
 TELEGRAM_TOPIC_NAME="bugfix-api" TELEGRAM_TOPIC_CHAT_ID="123456" \
-  claude --channels plugin:telegram-enhanced@vladzima/claude-telegram-enhanced
+  claude --channels plugin:telegram-enhanced@claude-telegram-enhanced
 ```
 
 Both sessions run the same bot. Messages in the "feature-auth" topic go to session 1; messages in "bugfix-api" go to session 2.
