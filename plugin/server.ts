@@ -979,6 +979,10 @@ void (async () => {
               process.stderr.write(
                 `telegram channel: created topic "${topicName}" (thread_id: ${boundTopicId}) in chat ${topicChatId}\n`,
               )
+              // Send a welcome message so the topic is visible in Telegram
+              await bot.api.sendMessage(topicChatId, `Claude Code session ready.\nBranch: ${topicName}`, {
+                message_thread_id: boundTopicId,
+              })
             } catch (err) {
               process.stderr.write(`telegram channel: failed to create topic "${topicName}": ${err}\n`)
             }
