@@ -181,13 +181,20 @@ export async function ensureDaemon(): Promise<void> {
     try { unlinkSync(PID_FILE) } catch {}
 
     // Spawn daemon detached. It inherits env (including TELEGRAM_BOT_TOKEN).
-    const daemonScript = join(import.meta.dir, '..', 'daemon.ts')
+    // Use the plugin root (parent of lib/) as cwd so imports resolve correctly.
+    const pluginRoot = join(import.meta.dir, '..')
+    const daemonScript = join(pluginRoot, 'daemon.ts')
+    const logFile = join(DAEMON_DIR, 'log')
+    const { openSync: openFile } = await import('fs')
+    const logFd = openFile(logFile, 'a')
     const child = spawn('bun', ['run', daemonScript], {
       detached: true,
-      stdio: 'ignore',
+      stdio: ['ignore', logFd, logFd],
+      cwd: pluginRoot,
       env: process.env,
     })
     child.unref()
+    closeSync(logFd)
 
     await waitForDaemon(5000)
   } finally {
