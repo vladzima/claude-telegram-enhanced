@@ -520,40 +520,54 @@ function drainInbox(dir: string): void {
 }
 
 function deliverEnvelope(filePath: string): void {
-  const envelope = readAndConsumeEnvelope(filePath)
-  if (!envelope) return
+  try {
+    const envelope = readAndConsumeEnvelope(filePath)
+    if (!envelope) return
 
-  // Skip stale messages (>1 hour old)
-  if (Date.now() - envelope.receivedAt > 60 * 60 * 1000) {
-    process.stderr.write(`telegram channel: skipping stale message (${Math.round((Date.now() - envelope.receivedAt) / 60000)}min old)\n`)
-    return
-  }
+    // Skip stale messages (>1 hour old)
+    if (Date.now() - envelope.receivedAt > 60 * 60 * 1000) {
+      _debugLog(`skipping stale message (${Math.round((Date.now() - envelope.receivedAt) / 60000)}min old)`)
+      return
+    }
 
-  mcp.notification({
-    method: 'notifications/claude/channel',
-    params: {
-      content: envelope.text,
-      meta: {
-        chat_id: envelope.chatId,
-        ...(envelope.messageId ? { message_id: String(envelope.messageId) } : {}),
-        ...(envelope.topicId != null ? { message_thread_id: String(envelope.topicId) } : {}),
-        ...(envelope.isTopicMessage ? { is_topic_message: 'true' } : {}),
-        user: envelope.fromUsername ?? envelope.fromId,
-        user_id: envelope.fromId,
-        ts: new Date(envelope.ts * 1000).toISOString(),
-        ...(envelope.imagePath ? { image_path: envelope.imagePath } : {}),
-        ...(envelope.attachment ? {
-          attachment_kind: envelope.attachment.kind,
-          attachment_file_id: envelope.attachment.file_id,
-          ...(envelope.attachment.size != null ? { attachment_size: String(envelope.attachment.size) } : {}),
-          ...(envelope.attachment.mime ? { attachment_mime: envelope.attachment.mime } : {}),
-          ...(envelope.attachment.name ? { attachment_name: envelope.attachment.name } : {}),
-        } : {}),
+    // Safely convert timestamp — fallback to receivedAt if ts is invalid
+    let tsIso: string
+    try {
+      tsIso = new Date((envelope.ts || 0) * 1000).toISOString()
+    } catch {
+      tsIso = new Date(envelope.receivedAt).toISOString()
+    }
+
+    _debugLog(`delivering envelope: msg=${envelope.messageId} from=${envelope.fromUsername} text="${envelope.text?.slice(0, 50)}"`)
+
+    mcp.notification({
+      method: 'notifications/claude/channel',
+      params: {
+        content: envelope.text,
+        meta: {
+          chat_id: envelope.chatId,
+          ...(envelope.messageId ? { message_id: String(envelope.messageId) } : {}),
+          ...(envelope.topicId != null ? { message_thread_id: String(envelope.topicId) } : {}),
+          ...(envelope.isTopicMessage ? { is_topic_message: 'true' } : {}),
+          user: envelope.fromUsername ?? envelope.fromId,
+          user_id: envelope.fromId,
+          ts: tsIso,
+          ...(envelope.imagePath ? { image_path: envelope.imagePath } : {}),
+          ...(envelope.attachment ? {
+            attachment_kind: envelope.attachment.kind,
+            attachment_file_id: envelope.attachment.file_id,
+            ...(envelope.attachment.size != null ? { attachment_size: String(envelope.attachment.size) } : {}),
+            ...(envelope.attachment.mime ? { attachment_mime: envelope.attachment.mime } : {}),
+            ...(envelope.attachment.name ? { attachment_name: envelope.attachment.name } : {}),
+          } : {}),
+        },
       },
-    },
-  }).catch(err => {
-    process.stderr.write(`telegram channel: failed to deliver inbound to Claude: ${err}\n`)
-  })
+    }).catch(err => {
+      _debugLog(`failed to deliver inbound to Claude: ${err}`)
+    })
+  } catch (err) {
+    _debugLog(`deliverEnvelope error: ${err}`)
+  }
 }
 
 _debugLog('about to call startup()')
