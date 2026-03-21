@@ -8,33 +8,76 @@ Forked from [anthropics/claude-plugins-official/telegram](https://github.com/ant
 
 | Feature | Description |
 | --- | --- |
+| **Shared polling daemon** | A single background daemon owns the `getUpdates` poll. Multiple plugin instances consume from per-topic inboxes — no 409 conflicts. |
 | **Topic routing** | Bind a Claude session to a single Telegram topic. Multiple sessions share one bot without conflicts. |
 | **Auto-create topics** | Set `TELEGRAM_TOPIC_NAME` and a topic is created on boot, named after your worktree/session. |
 | **Response streaming** | `send_draft` tool uses Telegram's `sendMessageDraft` API to show responses building in real-time. |
 | **Topic lifecycle** | `create_topic`, `edit_topic`, `delete_topic` tools for managing topics programmatically. |
-| **Scoped indicators** | Typing indicators appear in the correct topic, not just the top-level chat. |
+| **Scoped indicators** | Typing indicators and ack reactions appear in the correct topic, not just the top-level chat. |
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│  daemon.ts (single process per machine)         │
+│  Owns the getUpdates poll, runs gate(),         │
+│  writes JSON envelopes to per-topic dirs        │
+└───────────┬─────────────┬───────────────────────┘
+            │             │
+   topics/41/       topics/55/
+            │             │
+┌───────────┴───┐ ┌───────┴───────────┐
+│  server.ts    │ │  server.ts        │
+│  (worktree A) │ │  (worktree B)     │
+│  MCP server   │ │  MCP server       │
+│  watches 41/  │ │  watches 55/      │
+└───────────────┘ └───────────────────┘
+```
+
+Each `server.ts` is an MCP server spawned by Claude Code. It does **not** poll Telegram — it watches its topic's inbox directory via `fs.watch` + polling fallback. The daemon is spawned automatically on first use and persists across sessions.
 
 ## Prerequisites
 
 - [Bun](https://bun.sh) — `curl -fsSL https://bun.sh/install | bash`
-- A Telegram bot with **Threaded Mode** enabled via [@BotFather](https://t.me/BotFather) (required for topics; without it, the plugin works identically to the original)
+- A Telegram bot token (see setup below)
 
-## Quick setup
+## Telegram setup
 
-### 1. Create a bot with BotFather
+### 1. Create a bot
 
-Open [@BotFather](https://t.me/BotFather) on Telegram, send `/newbot`, pick a name and username. Copy the token (`123456789:AAHfiqksKZ8...`).
+1. Open [@BotFather](https://t.me/BotFather) on Telegram
+2. Send `/newbot`, pick a name and username
+3. Copy the token (`123456789:AAHfiqksKZ8...`)
 
-To enable topics, open the BotFather Mini App and toggle **Threaded Mode** on for your bot.
+### 2. Enable topics (Threaded Mode)
 
-### 2. Install the plugin
+Topics require a **group chat** — they don't work in private bot chats.
 
-First, register the marketplace:
+1. In BotFather, send `/mybots` → select your bot → **Bot Settings** → **Threaded Mode** → Enable
+2. Also turn **off** Group Privacy: **Bot Settings** → **Group Privacy** → Turn off (so the bot receives all messages, not just commands and mentions)
+
+### 3. Create a group chat
+
+1. Create a new Telegram group (or use an existing one)
+2. Enable **Topics**: Group settings → Topics → toggle on
+3. Add your bot to the group and **make it an admin** (it needs admin rights to create/close topics and react to messages)
+
+### 4. Get the group's chat ID
+
+Add [@userinfobot](https://t.me/userinfobot) to the group temporarily — it will print the chat ID (a negative number like `-1001234567890`). Remove it after.
+
+Alternatively, forward any message from the group to [@userinfobot](https://t.me/userinfobot) in a private chat.
+
+## Plugin installation
+
+### 1. Register the marketplace
+
 ```
 claude plugin marketplace add vladzima/claude-telegram-enhanced
 ```
 
-Then install:
+### 2. Install the plugin
+
 ```
 claude plugin install telegram-enhanced@claude-telegram-enhanced
 ```
@@ -58,7 +101,9 @@ echo 'TELEGRAM_BOT_TOKEN=123456789:AAHfiqksKZ8...' > ~/.claude/channels/telegram
 claude --channels plugin:telegram-enhanced@claude-telegram-enhanced
 ```
 
-### 5. Pair
+> **Note:** If this is the first time loading a development channel, you'll see a safety prompt — select "I am using this for local development" and press Enter.
+
+### 5. Pair with the bot
 
 DM your bot on Telegram — it replies with a 6-character code. In Claude Code:
 
@@ -66,7 +111,13 @@ DM your bot on Telegram — it replies with a 6-character code. In Claude Code:
 /telegram:access pair <code>
 ```
 
-Then lock access: `/telegram:access policy allowlist`
+Then lock access so only you can use the bot:
+
+```
+/telegram:access policy allowlist
+```
+
+You only need to pair once. The pairing persists across sessions.
 
 ## Topic routing
 
@@ -84,15 +135,21 @@ When bound, the session **only** receives messages from its topic and **all** re
 
 ```bash
 # Session 1 — gets its own topic "feature-auth"
-TELEGRAM_TOPIC_NAME="feature-auth" TELEGRAM_TOPIC_CHAT_ID="123456" \
+TELEGRAM_TOPIC_NAME="feature-auth" TELEGRAM_TOPIC_CHAT_ID="-1001234567890" \
   claude --channels plugin:telegram-enhanced@claude-telegram-enhanced
 
 # Session 2 — gets its own topic "bugfix-api"
-TELEGRAM_TOPIC_NAME="bugfix-api" TELEGRAM_TOPIC_CHAT_ID="123456" \
+TELEGRAM_TOPIC_NAME="bugfix-api" TELEGRAM_TOPIC_CHAT_ID="-1001234567890" \
   claude --channels plugin:telegram-enhanced@claude-telegram-enhanced
 ```
 
 Both sessions run the same bot. Messages in the "feature-auth" topic go to session 1; messages in "bugfix-api" go to session 2.
+
+### Topic teardown
+
+When a session ends, its topic can be closed (archived) via the Telegram API. The plugin persists topic metadata (`meta.json`) in the daemon's topic directory so external scripts can find the thread ID by topic name and call `closeForumTopic`.
+
+See [superset-claude-telegram](https://github.com/vladzima/superset-claude-telegram) for an automated teardown example.
 
 ## Tools
 
