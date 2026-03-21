@@ -1,11 +1,13 @@
 {
-  "name": "telegram",
-  "description": "Telegram channel for Claude Code \u2014 messaging bridge with built-in access control. Manage pairing, allowlists, and policy via /telegram:access.",
-  "version": "0.0.1",
+  "name": "telegram-enhanced",
+  "description": "Enhanced Telegram channel for Claude Code \u2014 topic-per-worktree routing, response streaming via drafts, and full access control.",
+  "version": "0.1.0",
   "keywords": [
     "telegram",
     "messaging",
     "channel",
-    "mcp"
+    "mcp",
+    "topics",
+    "streaming"
   ]
 }
