@@ -440,11 +440,13 @@ process.on('SIGINT', shutdown)
 // --- Startup: ensure daemon, create topic, watch inbox ---
 
 async function startup(): Promise<void> {
+  process.stderr.write('telegram channel: startup() called\n')
   // 1. Start the daemon if not running
   await ensureDaemon()
   process.stderr.write('telegram channel: daemon is running\n')
 
   // 2. Create topic if needed
+  process.stderr.write(`telegram channel: topic check — topicName=${topicName}, topicChatId=${topicChatId}, boundTopicId=${boundTopicId}\n`)
   if (topicName && topicChatId && boundTopicId == null) {
     try {
       const topic = await bot.api.createForumTopic(topicChatId, topicName)
