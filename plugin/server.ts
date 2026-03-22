@@ -457,12 +457,18 @@ async function startup(): Promise<void> {
         message_thread_id: boundTopicId,
       })
       // Persist topic metadata for teardown
-      writeTopicMeta(boundTopicId, {
-        topicName,
-        chatId: topicChatId,
-        threadId: boundTopicId,
-        createdAt: Date.now(),
-      })
+      process.stderr.write(`telegram channel: writing meta.json for topic ${boundTopicId}...\n`)
+      try {
+        writeTopicMeta(boundTopicId, {
+          topicName,
+          chatId: topicChatId,
+          threadId: boundTopicId,
+          createdAt: Date.now(),
+        })
+        process.stderr.write(`telegram channel: meta.json written successfully\n`)
+      } catch (metaErr) {
+        process.stderr.write(`telegram channel: FAILED to write meta.json: ${metaErr}\n`)
+      }
     } catch (err) {
       process.stderr.write(`telegram channel: failed to create topic "${topicName}": ${err}\n`)
     }
