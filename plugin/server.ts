@@ -498,7 +498,7 @@ async function startup(): Promise<void> {
   // Watch for new envelopes via fs.watch
   try {
     watch(watchDir, (event, filename) => {
-      if (filename && filename.endsWith('.json') && !filename.endsWith('.tmp')) {
+      if (filename && filename.endsWith('.json') && !filename.endsWith('.tmp') && filename !== 'meta.json') {
         deliverEnvelope(join(watchDir, filename))
       }
     })
