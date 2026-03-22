@@ -439,22 +439,12 @@ process.on('SIGINT', shutdown)
 
 // --- Startup: ensure daemon, create topic, watch inbox ---
 
-import { appendFileSync } from 'fs'
-const DIAG_LOG = '/tmp/telegram-server-diag.log'
-function diag(msg: string): void {
-  const line = `[${new Date().toISOString()}] ${msg}\n`
-  try { appendFileSync(DIAG_LOG, line) } catch {}
-  process.stderr.write(`telegram channel: ${msg}\n`)
-}
-
 async function startup(): Promise<void> {
-  diag('startup() called')
   // 1. Start the daemon if not running
   await ensureDaemon()
   process.stderr.write('telegram channel: daemon is running\n')
 
   // 2. Create topic if needed
-  diag(`topic check — topicName=${topicName}, topicChatId=${topicChatId}, boundTopicId=${boundTopicId}`)
   if (topicName && topicChatId && boundTopicId == null) {
     try {
       const topic = await bot.api.createForumTopic(topicChatId, topicName)
@@ -467,18 +457,12 @@ async function startup(): Promise<void> {
         message_thread_id: boundTopicId,
       })
       // Persist topic metadata for teardown
-      diag(`writing meta.json for topic ${boundTopicId}...`)
-      try {
-        writeTopicMeta(boundTopicId, {
-          topicName,
-          chatId: topicChatId,
-          threadId: boundTopicId,
-          createdAt: Date.now(),
-        })
-        diag('meta.json written successfully')
-      } catch (metaErr) {
-        diag(`FAILED to write meta.json: ${metaErr}`)
-      }
+      writeTopicMeta(boundTopicId, {
+        topicName,
+        chatId: topicChatId,
+        threadId: boundTopicId,
+        createdAt: Date.now(),
+      })
     } catch (err) {
       process.stderr.write(`telegram channel: failed to create topic "${topicName}": ${err}\n`)
     }
