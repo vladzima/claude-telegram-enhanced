@@ -439,14 +439,22 @@ process.on('SIGINT', shutdown)
 
 // --- Startup: ensure daemon, create topic, watch inbox ---
 
+import { appendFileSync } from 'fs'
+const DIAG_LOG = '/tmp/telegram-server-diag.log'
+function diag(msg: string): void {
+  const line = `[${new Date().toISOString()}] ${msg}\n`
+  try { appendFileSync(DIAG_LOG, line) } catch {}
+  process.stderr.write(`telegram channel: ${msg}\n`)
+}
+
 async function startup(): Promise<void> {
-  process.stderr.write('telegram channel: startup() called\n')
+  diag('startup() called')
   // 1. Start the daemon if not running
   await ensureDaemon()
   process.stderr.write('telegram channel: daemon is running\n')
 
   // 2. Create topic if needed
-  process.stderr.write(`telegram channel: topic check — topicName=${topicName}, topicChatId=${topicChatId}, boundTopicId=${boundTopicId}\n`)
+  diag(`topic check — topicName=${topicName}, topicChatId=${topicChatId}, boundTopicId=${boundTopicId}`)
   if (topicName && topicChatId && boundTopicId == null) {
     try {
       const topic = await bot.api.createForumTopic(topicChatId, topicName)
@@ -459,7 +467,7 @@ async function startup(): Promise<void> {
         message_thread_id: boundTopicId,
       })
       // Persist topic metadata for teardown
-      process.stderr.write(`telegram channel: writing meta.json for topic ${boundTopicId}...\n`)
+      diag(`writing meta.json for topic ${boundTopicId}...`)
       try {
         writeTopicMeta(boundTopicId, {
           topicName,
@@ -467,9 +475,9 @@ async function startup(): Promise<void> {
           threadId: boundTopicId,
           createdAt: Date.now(),
         })
-        process.stderr.write(`telegram channel: meta.json written successfully\n`)
+        diag('meta.json written successfully')
       } catch (metaErr) {
-        process.stderr.write(`telegram channel: FAILED to write meta.json: ${metaErr}\n`)
+        diag(`FAILED to write meta.json: ${metaErr}`)
       }
     } catch (err) {
       process.stderr.write(`telegram channel: failed to create topic "${topicName}": ${err}\n`)
